@@ -1,0 +1,41 @@
+name: fs_scene_map_editor
+description: A shared Flutter package for scene map editor and canvas interactions.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flame: ^1.34.0
+  protobuf: ^6.0.0
+  fixnum: ^1.1.1
+  path: ^1.9.1
+  meta: ^1.17.0
+  provider: ^6.1.5+1
+  desktop_drop: ^0.7.1
+  protobuf_message_editor:
+    git:
+      url: https://github.com/vunyunt/protobuf_message_editor.git
+      ref: main
+  protobuf_serializable_components:
+    git:
+      url: https://github.com/vunyunt/protobuf_serializable_components.git
+      ref: main
+  fs_scene_map:
+    path: ../fs_scene_map
+
+dependency_overrides:
+  protobuf_message_editor:
+    path: ../protobuf_message_editor
+  protobuf_serializable_components:
+    path: ../protobuf_serializable_components
+  fs_scene_map:
+    path: ../fs_scene_map
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: any
