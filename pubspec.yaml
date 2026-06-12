@@ -25,7 +25,9 @@ dependencies:
       url: https://github.com/vunyunt/protobuf_serializable_components.git
       ref: main
   fs_scene_map:
-    path: ../fs_scene_map
+    git:
+      url: https://github.com/vunyunt/fs_scene_map.git
+      ref: main
 
 dependency_overrides:
   protobuf_message_editor:
