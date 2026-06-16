@@ -217,8 +217,8 @@ class WorldEditorController extends PositionComponent
       }
     }
 
-    // If nothing selectable is under the cursor, we pan the camera
-    if (selectable == null) {
+    // If nothing selectable is under the cursor, we pan the camera unless the tool captures the drag
+    if (selectable == null && !(_activeTool?.captureDragStart(event) ?? false)) {
       _isPanning = true;
       return;
     }
