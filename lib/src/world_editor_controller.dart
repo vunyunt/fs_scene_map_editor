@@ -27,6 +27,7 @@ class WorldEditorController extends PositionComponent
   final SceneMapEditorDelegate delegate;
   final ChildSelectorBuilder? childSelectorBuilder;
   final AssetImportDelegate? assetImportDelegate;
+  final ContextualToolbarBuilder? contextualToolbarBuilder;
   
   final WorldEditorCommandManager commandManager = WorldEditorCommandManager();
   final Map<Component, SelectionGizmo> _gizmos = {};
@@ -57,6 +58,7 @@ class WorldEditorController extends PositionComponent
     required this.delegate,
     this.childSelectorBuilder,
     this.assetImportDelegate,
+    this.contextualToolbarBuilder,
   }) {
     // The controller should be at a high priority to capture taps,
     // but the gizmos should be even higher.

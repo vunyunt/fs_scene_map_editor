@@ -16,6 +16,7 @@ class SceneMapEditorWorkspace extends StatefulWidget {
   final SceneMapEditorDelegate delegate;
   final ChildSelectorBuilder? childSelectorBuilder;
   final AssetImportDelegate? assetImportDelegate;
+  final ContextualToolbarBuilder? contextualToolbarBuilder;
   final Future<void> Function(WorldEditorController controller) onLoadScene;
   final Future<void> Function() onSave;
   final VoidCallback onDispose;
@@ -29,6 +30,7 @@ class SceneMapEditorWorkspace extends StatefulWidget {
     required this.onDispose,
     this.childSelectorBuilder,
     this.assetImportDelegate,
+    this.contextualToolbarBuilder,
   });
 
   @override
@@ -51,6 +53,7 @@ class _SceneMapEditorWorkspaceState extends State<SceneMapEditorWorkspace> {
       delegate: widget.delegate,
       childSelectorBuilder: widget.childSelectorBuilder,
       assetImportDelegate: widget.assetImportDelegate,
+      contextualToolbarBuilder: widget.contextualToolbarBuilder,
     );
 
     _loadScene();

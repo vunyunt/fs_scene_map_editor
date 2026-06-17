@@ -102,6 +102,12 @@ class _WorldEditorContextualToolbarState
                           },
                         ),
                       _buildAssetButton(context, target),
+                      if (widget.controller.contextualToolbarBuilder != null)
+                        ...widget.controller.contextualToolbarBuilder!(
+                          context,
+                          target,
+                          widget.controller,
+                        ),
                     ],
                   ),
                 ),

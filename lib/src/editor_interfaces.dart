@@ -7,6 +7,7 @@ import 'package:protobuf/well_known_types/google/protobuf/any.pb.dart';
 import 'package:protobuf_message_editor/protobuf_message_editor.dart';
 import 'package:protobuf_serializable_components/protobuf_serializable_components.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'world_editor_controller.dart';
 
 mixin EditorGameHost on FlameGame {
   SerializableComponentRegistry get serializableComponentRegistry;
@@ -44,3 +45,10 @@ typedef ChildSelectorBuilder = Widget Function(
   void Function(Any childAny) onConfirm,
   VoidCallback onCancel,
 );
+
+typedef ContextualToolbarBuilder = List<Widget> Function(
+  BuildContext context,
+  PositionComponent target,
+  WorldEditorController controller,
+);
+
