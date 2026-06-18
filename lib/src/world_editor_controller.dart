@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show Colors;
 import 'package:flutter/services.dart';
 import 'package:protobuf_serializable_components/protobuf_serializable_components.dart';
 import 'package:protobuf/well_known_types/google/protobuf/any.pb.dart';
@@ -29,7 +30,8 @@ class WorldEditorController extends PositionComponent
   final ChildSelectorBuilder? childSelectorBuilder;
   final AssetImportDelegate? assetImportDelegate;
   final ContextualToolbarBuilder? contextualToolbarBuilder;
-  
+  final Set<LogicalKeyboardKey> Function() logicalKeysPressed;
+
   final WorldEditorCommandManager commandManager = WorldEditorCommandManager();
   final Map<Component, SelectionGizmo> _gizmos = {};
   final ValueNotifier<SecondaryTapDownEvent?> contextMenuRequest =
@@ -40,6 +42,9 @@ class WorldEditorController extends PositionComponent
   Vector2? lastSecondaryTapPosition;
 
   bool _isPanning = false;
+  bool _isAreaSelecting = false;
+  Vector2? _areaSelectionStart;
+  Vector2? _areaSelectionEnd;
 
   EditorTool? _activeTool;
   EditorTool? get activeTool => _activeTool;
@@ -85,7 +90,10 @@ class WorldEditorController extends PositionComponent
     this.childSelectorBuilder,
     this.assetImportDelegate,
     this.contextualToolbarBuilder,
-  }) {
+    Set<LogicalKeyboardKey> Function()? logicalKeysPressed,
+  }) : logicalKeysPressed =
+           logicalKeysPressed ??
+           (() => HardwareKeyboard.instance.logicalKeysPressed) {
     // The controller should be at a high priority to capture taps,
     // but the gizmos should be even higher.
     priority = 100;
@@ -149,7 +157,10 @@ class WorldEditorController extends PositionComponent
     // Add gizmos for newly selected components
     for (final c in selected) {
       if (c is PositionComponent && !_gizmos.containsKey(c)) {
-        final gizmo = SelectionGizmo(target: c);
+        final gizmo = SelectionGizmo(
+          target: c,
+          isPrimary: () => selectionManager.primarySelection == c,
+        );
         add(gizmo);
         _gizmos[c] = gizmo;
       }
@@ -159,8 +170,17 @@ class WorldEditorController extends PositionComponent
   @override
   bool containsLocalPoint(Vector2 point) => true; // Capture all taps in world space
 
+  bool _isPanModifierPressed(Set<LogicalKeyboardKey> keys) {
+    return keys.contains(LogicalKeyboardKey.altLeft) ||
+        keys.contains(LogicalKeyboardKey.altRight);
+  }
+
   @override
   void onTapDown(TapDownEvent event) {
+    if (_isPanModifierPressed(logicalKeysPressed())) {
+      return;
+    }
+
     if (_activeTool != null) {
       _activeTool!.onTapDown(event);
       if (event.handled) return;
@@ -182,13 +202,13 @@ class WorldEditorController extends PositionComponent
     }
 
     if (selectable != null) {
-      final keys = HardwareKeyboard.instance.logicalKeysPressed;
-      if (keys.contains(LogicalKeyboardKey.shiftLeft) ||
-          keys.contains(LogicalKeyboardKey.shiftRight)) {
+      final keys = logicalKeysPressed();
+      if (_isMultiSelectModifierPressed(keys)) {
         selectionManager.toggle(selectable);
+      } else if (selectionManager.isSelected(selectable)) {
+        selectionManager.setPrimary(selectable);
       } else {
-        selectionManager.clear();
-        selectionManager.select(selectable);
+        selectionManager.selectOnly(selectable);
       }
     } else {
       selectionManager.clear();
@@ -226,13 +246,15 @@ class WorldEditorController extends PositionComponent
   void onDragStart(DragStartEvent event) {
     super.onDragStart(event);
 
-    final keys = HardwareKeyboard.instance.logicalKeysPressed;
+    final keys = logicalKeysPressed();
     final isSpacePressed = keys.contains(LogicalKeyboardKey.space);
 
-    if (isSpacePressed) {
+    if (isSpacePressed || _isPanModifierPressed(keys)) {
       _isPanning = true;
       return;
     }
+
+    final isMultiSelect = _isMultiSelectModifierPressed(keys);
 
     // Check what is under the cursor at the start of the drag
     final components = game.world.componentsAtPoint(event.localPosition);
@@ -245,10 +267,29 @@ class WorldEditorController extends PositionComponent
       }
     }
 
-    // If nothing selectable is under the cursor, we pan the camera unless the tool captures the drag
-    if (selectable == null && !(_activeTool?.captureDragStart(event) ?? false)) {
-      _isPanning = true;
+    final activeToolCapturesDrag =
+        _activeTool?.captureDragStart(event) ?? false;
+
+    if (selectable == null && !activeToolCapturesDrag) {
+      _isAreaSelecting = true;
+      _areaSelectionStart = event.localPosition.clone();
+      _areaSelectionEnd = event.localPosition.clone();
+      if (!isMultiSelect) {
+        selectionManager.clear();
+      }
       return;
+    }
+
+    if (isMultiSelect && selectable != null) {
+      selectionManager.toggle(selectable);
+      event.handled = true;
+      return;
+    }
+
+    if (selectable != null && !selectionManager.isSelected(selectable)) {
+      selectionManager.selectOnly(selectable);
+    } else if (selectable != null) {
+      selectionManager.setPrimary(selectable);
     }
 
     _activeTool?.onDragStart(event);
@@ -266,6 +307,12 @@ class WorldEditorController extends PositionComponent
       return;
     }
 
+    if (_isAreaSelecting) {
+      _areaSelectionEnd = (_areaSelectionEnd ?? _areaSelectionStart)?.clone()
+        ?..add(event.localDelta);
+      return;
+    }
+
     _activeTool?.onDragUpdate(event);
   }
 
@@ -274,6 +321,11 @@ class WorldEditorController extends PositionComponent
     super.onDragEnd(event);
     if (_isPanning) {
       _isPanning = false;
+    } else if (_isAreaSelecting) {
+      _selectComponentsInArea();
+      _isAreaSelecting = false;
+      _areaSelectionStart = null;
+      _areaSelectionEnd = null;
     } else {
       _activeTool?.onDragEnd(event);
     }
@@ -321,6 +373,11 @@ class WorldEditorController extends PositionComponent
           return true;
         }
       }
+
+      if (event.logicalKey == LogicalKeyboardKey.tab) {
+        selectionManager.togglePrimaryForward();
+        return selectionManager.hasSelection;
+      }
     }
     return super.onKeyEvent(event, keysPressed);
   }
@@ -335,5 +392,92 @@ class WorldEditorController extends PositionComponent
   void render(Canvas canvas) {
     super.render(canvas);
     _activeTool?.render(canvas);
+    _renderAreaSelection(canvas);
+  }
+
+  bool _isMultiSelectModifierPressed(Set<LogicalKeyboardKey> keys) {
+    return keys.contains(LogicalKeyboardKey.controlLeft) ||
+        keys.contains(LogicalKeyboardKey.controlRight) ||
+        keys.contains(LogicalKeyboardKey.metaLeft) ||
+        keys.contains(LogicalKeyboardKey.metaRight);
+  }
+
+  void _selectComponentsInArea() {
+    final rect = _areaSelectionRect;
+    if (rect == null) return;
+
+    final existing = selectionManager.selectedComponents.toList();
+    final selected = <Component>[
+      if (_isMultiSelectModifierPressed(logicalKeysPressed())) ...existing,
+    ];
+
+    for (final component in _selectableComponentsIn(game.world)) {
+      if (component is! PositionComponent) continue;
+      if (!_componentIntersectsRect(component, rect)) continue;
+      if (!selected.contains(component)) {
+        selected.add(component);
+      }
+    }
+
+    selectionManager.selectAll(selected);
+  }
+
+  Iterable<Component> _selectableComponentsIn(Component root) sync* {
+    for (final child in root.children) {
+      final selectable = _findSelectableRoot(child);
+      if (selectable == child) {
+        yield child;
+      }
+      yield* _selectableComponentsIn(child);
+    }
+  }
+
+  bool _componentIntersectsRect(PositionComponent component, Rect rect) {
+    final corners = [
+      Vector2.zero(),
+      Vector2(component.size.x, 0),
+      component.size,
+      Vector2(0, component.size.y),
+    ].map(component.absolutePositionOf).toList();
+
+    final xs = corners.map((corner) => corner.x);
+    final ys = corners.map((corner) => corner.y);
+    final bounds = Rect.fromLTRB(
+      xs.reduce((a, b) => a < b ? a : b),
+      ys.reduce((a, b) => a < b ? a : b),
+      xs.reduce((a, b) => a > b ? a : b),
+      ys.reduce((a, b) => a > b ? a : b),
+    );
+
+    return bounds.overlaps(rect) || rect.contains(bounds.center);
+  }
+
+  Rect? get _areaSelectionRect {
+    final start = _areaSelectionStart;
+    final end = _areaSelectionEnd;
+    if (start == null || end == null) return null;
+
+    return Rect.fromLTRB(
+      start.x < end.x ? start.x : end.x,
+      start.y < end.y ? start.y : end.y,
+      start.x > end.x ? start.x : end.x,
+      start.y > end.y ? start.y : end.y,
+    );
+  }
+
+  void _renderAreaSelection(Canvas canvas) {
+    final rect = _areaSelectionRect;
+    if (!_isAreaSelecting || rect == null) return;
+
+    final fill = Paint()
+      ..color = Colors.lightBlueAccent.withValues(alpha: 0.12)
+      ..style = PaintingStyle.fill;
+    final stroke = Paint()
+      ..color = Colors.lightBlueAccent.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    canvas.drawRect(rect, fill);
+    canvas.drawRect(rect, stroke);
   }
 }

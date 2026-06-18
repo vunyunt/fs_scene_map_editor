@@ -69,11 +69,13 @@ class _SceneMapInspectorState extends State<SceneMapInspector> {
       }
     }
 
-    final selected = selectionManager.selectedComponents.first;
+    final selected = selectionManager.primarySelection;
+    if (selected == null) {
+      return const Center(child: Text('Select a component to view properties'));
+    }
+
     if (selected is! ProtoSerializable) {
-      return const Center(
-        child: Text('Selected component is not editable'),
-      );
+      return const Center(child: Text('Selected component is not editable'));
     }
 
     final serializable = selected as ProtoSerializable;
@@ -224,8 +226,9 @@ class _SceneMapInspectorState extends State<SceneMapInspector> {
                                       .withValues(alpha: 0.15),
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                    color: theme.colorScheme.primary
-                                        .withValues(alpha: 0.2),
+                                    color: theme.colorScheme.primary.withValues(
+                                      alpha: 0.2,
+                                    ),
                                   ),
                                 ),
                                 alignment: Alignment.center,

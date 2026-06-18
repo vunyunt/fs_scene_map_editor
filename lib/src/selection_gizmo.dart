@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 
 class SelectionGizmo extends PositionComponent {
   final PositionComponent target;
+  final bool Function() isPrimary;
 
-  SelectionGizmo({required this.target}) {
+  SelectionGizmo({required this.target, required this.isPrimary}) {
     // High priority to render above everything else
     priority = 1000;
   }
@@ -28,21 +29,23 @@ class SelectionGizmo extends PositionComponent {
 
   @override
   void render(Canvas canvas) {
+    final color = isPrimary()
+        ? const Color(0xFFFFD54F)
+        : const Color(0xFF00FFFF);
     final paint = Paint()
-      ..color =
-          const Color(0xFF00FFFF) // Cyan
+      ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = isPrimary() ? 3 : 2;
 
     // Draw a rectangle around the component
     canvas.drawRect(size.toRect(), paint);
 
     // Draw small squares at corners
     final cornerPaint = Paint()
-      ..color = const Color(0xFF00FFFF)
+      ..color = color
       ..style = PaintingStyle.fill;
 
-    const cornerSize = 4.0;
+    final cornerSize = isPrimary() ? 6.0 : 4.0;
     canvas.drawRect(Rect.fromLTWH(0, 0, cornerSize, cornerSize), cornerPaint);
     canvas.drawRect(
       Rect.fromLTWH(size.x - cornerSize, 0, cornerSize, cornerSize),
