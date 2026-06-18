@@ -32,6 +32,7 @@ abstract class SceneMapEditorDelegate {
   void onDeleteComponent(Component component);
   void onAddChild(PositionComponent parent, Any childAny);
   void onCreateComponent(Vector2 worldPos, Any childAny);
+  void onPaste(Vector2 worldPos, Any childAny);
 }
 
 abstract class AssetImportDelegate {

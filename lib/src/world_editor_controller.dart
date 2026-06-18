@@ -4,6 +4,7 @@ import 'package:flame/events.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:protobuf_serializable_components/protobuf_serializable_components.dart';
+import 'package:protobuf/well_known_types/google/protobuf/any.pb.dart';
 import 'package:fs_scene_map/fs_scene_map.dart';
 
 import 'world_editor_selection_manager.dart';
@@ -52,6 +53,31 @@ class WorldEditorController extends PositionComponent
   }
 
   bool isSimulationRunning = false;
+
+  Vector2 _mousePosition = Vector2.zero();
+  Vector2 get mousePosition => _mousePosition;
+
+  void updateMousePosition(Vector2 pos) {
+    _mousePosition = pos;
+  }
+
+  static final List<Any> _clipboard = [];
+
+  void copySelection() {
+    _clipboard.clear();
+    for (final component in selectionManager.selectedComponents) {
+      if (component is ProtoSerializable) {
+        _clipboard.add(Any.pack((component as ProtoSerializable).serialize()));
+      }
+    }
+  }
+
+  void paste() {
+    if (_clipboard.isEmpty) return;
+    for (final any in _clipboard) {
+      delegate.onPaste(_mousePosition, any);
+    }
+  }
 
   WorldEditorController({
     required this.selectionManager,
@@ -271,6 +297,14 @@ class WorldEditorController extends PositionComponent
       if (isControl) {
         if (keysPressed.contains(LogicalKeyboardKey.keyS)) {
           save();
+          return true;
+        }
+        if (keysPressed.contains(LogicalKeyboardKey.keyC)) {
+          copySelection();
+          return true;
+        }
+        if (keysPressed.contains(LogicalKeyboardKey.keyV)) {
+          paste();
           return true;
         }
         if (keysPressed.contains(LogicalKeyboardKey.keyZ)) {

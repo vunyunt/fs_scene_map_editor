@@ -195,20 +195,31 @@ class _GameWidgetAdapterState extends State<GameWidgetAdapter> {
   Widget build(BuildContext context) {
     final game = context.read<EditorGameHost>();
     return ClipRect(
-      child: DropTarget(
-        onDragDone: _handleDrop,
-        child: GameWidget(
-          game: game,
-          overlayBuilderMap: {
-            'ContextMenu': (context, game) {
-              return WorldEditorContextMenu(controller: widget.controller);
+      child: MouseRegion(
+        onHover: (event) {
+          final widgetPos = Vector2(
+            event.localPosition.dx,
+            event.localPosition.dy,
+          );
+          final screenPos = game.camera.viewport.localToGlobal(widgetPos);
+          final worldPos = game.camera.globalToLocal(screenPos);
+          widget.controller.updateMousePosition(worldPos);
+        },
+        child: DropTarget(
+          onDragDone: _handleDrop,
+          child: GameWidget(
+            game: game,
+            overlayBuilderMap: {
+              'ContextMenu': (context, game) {
+                return WorldEditorContextMenu(controller: widget.controller);
+              },
+              'ContextualToolbar': (context, game) {
+                return WorldEditorContextualToolbar(
+                  controller: widget.controller,
+                );
+              },
             },
-            'ContextualToolbar': (context, game) {
-              return WorldEditorContextualToolbar(
-                controller: widget.controller,
-              );
-            },
-          },
+          ),
         ),
       ),
     );
