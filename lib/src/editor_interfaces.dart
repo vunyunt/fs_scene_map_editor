@@ -9,47 +9,21 @@ import 'package:protobuf_serializable_components/protobuf_serializable_component
 import 'package:desktop_drop/desktop_drop.dart';
 import 'world_editor_controller.dart';
 
-mixin EditorGameHost on FlameGame {
-  SerializableComponentRegistry get serializableComponentRegistry;
-  GenericDescriptorRegistry get descriptorRegistry;
-  TypeRegistry get typeRegistry;
-  ProtoMapEditorProvider get editorProvider;
-  Int64 nextId();
+export './interfaces/asset_import_delegate.dart';
+export './interfaces/editor_game_host.dart';
+export './interfaces/scene_map_editor_delegate.dart';
 
-  String getComponentName(GeneratedMessage proto);
-  String getComponentShortDescription(GeneratedMessage proto);
-  IconData? getComponentIcon(GeneratedMessage proto);
+typedef ChildSelectorBuilder =
+    Widget Function(
+      BuildContext context,
+      PositionComponent? parent,
+      void Function(Any childAny) onConfirm,
+      VoidCallback onCancel,
+    );
 
-  void pushWorld(World Function() builder);
-  void popWorld();
-}
-
-abstract class SceneMapEditorDelegate {
-  void updatePosition(PositionComponent component, Vector2 position);
-  void updateScale(PositionComponent component, Vector2 scale);
-  void updateAngle(PositionComponent component, double angle);
-
-  void onDeleteComponent(Component component);
-  void onAddChild(PositionComponent parent, Any childAny);
-  void onCreateComponent(Vector2 worldPos, Any childAny);
-  void onPaste(Vector2 worldPos, Any childAny);
-}
-
-abstract class AssetImportDelegate {
-  Future<void> onDropDone(BuildContext context, DropDoneDetails details, Vector2 worldPos);
-  Widget? buildAssetButton(BuildContext context, PositionComponent target);
-}
-
-typedef ChildSelectorBuilder = Widget Function(
-  BuildContext context,
-  PositionComponent? parent,
-  void Function(Any childAny) onConfirm,
-  VoidCallback onCancel,
-);
-
-typedef ContextualToolbarBuilder = List<Widget> Function(
-  BuildContext context,
-  PositionComponent target,
-  WorldEditorController controller,
-);
-
+typedef ContextualToolbarBuilder =
+    List<Widget> Function(
+      BuildContext context,
+      PositionComponent target,
+      WorldEditorController controller,
+    );
