@@ -20,6 +20,7 @@ class SceneMapEditorWorkspace extends StatefulWidget {
   final Future<void> Function(WorldEditorController controller) onLoadScene;
   final Future<void> Function() onSave;
   final VoidCallback onDispose;
+  final Map<EditorShortcutActivator, EditorControllerAction>? customKeyBindings;
 
   const SceneMapEditorWorkspace({
     super.key,
@@ -31,6 +32,7 @@ class SceneMapEditorWorkspace extends StatefulWidget {
     this.childSelectorBuilder,
     this.assetImportDelegate,
     this.contextualToolbarBuilder,
+    this.customKeyBindings,
   });
 
   @override
@@ -54,6 +56,7 @@ class _SceneMapEditorWorkspaceState extends State<SceneMapEditorWorkspace> {
       childSelectorBuilder: widget.childSelectorBuilder,
       assetImportDelegate: widget.assetImportDelegate,
       contextualToolbarBuilder: widget.contextualToolbarBuilder,
+      customKeyBindings: widget.customKeyBindings,
     );
 
     _loadScene();
@@ -137,15 +140,19 @@ class GameWidgetAdapter extends StatefulWidget {
 }
 
 class _GameWidgetAdapterState extends State<GameWidgetAdapter> {
+  late final FocusNode _gameFocusNode;
+
   @override
   void initState() {
     super.initState();
+    _gameFocusNode = FocusNode();
     widget.controller.contextMenuRequest.addListener(_onContextMenuRequest);
     widget.controller.selectionManager.addListener(_onSelectionChanged);
   }
 
   @override
   void dispose() {
+    _gameFocusNode.dispose();
     widget.controller.contextMenuRequest.removeListener(_onContextMenuRequest);
     widget.controller.selectionManager.removeListener(_onSelectionChanged);
     super.dispose();
@@ -207,18 +214,22 @@ class _GameWidgetAdapterState extends State<GameWidgetAdapter> {
         },
         child: DropTarget(
           onDragDone: _handleDrop,
-          child: GameWidget(
-            game: game,
-            overlayBuilderMap: {
-              'ContextMenu': (context, game) {
-                return WorldEditorContextMenu(controller: widget.controller);
+          child: Listener(
+            onPointerDown: (_) => _gameFocusNode.requestFocus(),
+            child: GameWidget(
+              game: game,
+              focusNode: _gameFocusNode,
+              overlayBuilderMap: {
+                'ContextMenu': (context, game) {
+                  return WorldEditorContextMenu(controller: widget.controller);
+                },
+                'ContextualToolbar': (context, game) {
+                  return WorldEditorContextualToolbar(
+                    controller: widget.controller,
+                  );
+                },
               },
-              'ContextualToolbar': (context, game) {
-                return WorldEditorContextualToolbar(
-                  controller: widget.controller,
-                );
-              },
-            },
+            ),
           ),
         ),
       ),

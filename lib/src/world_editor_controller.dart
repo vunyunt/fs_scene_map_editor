@@ -18,14 +18,14 @@ import 'tools/move_tool.dart';
 import 'tools/rotate_tool.dart';
 import 'tools/scale_tool.dart';
 
-typedef ShortcutActivator = ({
+typedef EditorShortcutActivator = ({
   LogicalKeyboardKey key,
   bool control,
   bool shift,
   bool alt,
 });
 
-typedef ControllerAction = bool Function(WorldEditorController controller);
+typedef EditorControllerAction = bool Function(WorldEditorController controller);
 
 class WorldEditorController extends PositionComponent
     with
@@ -93,7 +93,7 @@ class WorldEditorController extends PositionComponent
     }
   }
 
-  static final Map<ShortcutActivator, ControllerAction> defaultKeyBindings = {
+  static final Map<EditorShortcutActivator, EditorControllerAction> defaultKeyBindings = {
     (key: LogicalKeyboardKey.keyS, control: true, shift: false, alt: false): (c) {
       c.save();
       return true;
@@ -133,9 +133,60 @@ class WorldEditorController extends PositionComponent
       }
       return false;
     },
+    (key: LogicalKeyboardKey.escape, control: false, shift: false, alt: false): (c) {
+      if (c.selectionManager.hasSelection) {
+        c.selectionManager.clear();
+        return true;
+      }
+      return false;
+    },
+    (key: LogicalKeyboardKey.keyF, control: false, shift: false, alt: false): (c) {
+      c.focusSelection();
+      return true;
+    },
+    (key: LogicalKeyboardKey.keyD, control: true, shift: false, alt: false): (c) {
+      c.duplicateSelection();
+      return true;
+    },
+    (key: LogicalKeyboardKey.equal, control: true, shift: false, alt: false): (c) {
+      c.zoomIn();
+      return true;
+    },
+    (key: LogicalKeyboardKey.numpadAdd, control: true, shift: false, alt: false): (c) {
+      c.zoomIn();
+      return true;
+    },
+    (key: LogicalKeyboardKey.minus, control: true, shift: false, alt: false): (c) {
+      c.zoomOut();
+      return true;
+    },
+    (key: LogicalKeyboardKey.numpadSubtract, control: true, shift: false, alt: false): (c) {
+      c.zoomOut();
+      return true;
+    },
+    (key: LogicalKeyboardKey.digit0, control: true, shift: false, alt: false): (c) {
+      c.resetZoom();
+      return true;
+    },
+    (key: LogicalKeyboardKey.numpad0, control: true, shift: false, alt: false): (c) {
+      c.resetZoom();
+      return true;
+    },
+    (key: LogicalKeyboardKey.digit1, control: false, shift: false, alt: false): (c) {
+      c.useMoveTool();
+      return true;
+    },
+    (key: LogicalKeyboardKey.digit2, control: false, shift: false, alt: false): (c) {
+      c.useRotateTool();
+      return true;
+    },
+    (key: LogicalKeyboardKey.digit3, control: false, shift: false, alt: false): (c) {
+      c.useScaleTool();
+      return true;
+    },
   };
 
-  final Map<ShortcutActivator, ControllerAction> _keyBindings;
+  final Map<EditorShortcutActivator, EditorControllerAction> _keyBindings;
 
   WorldEditorController({
     required this.selectionManager,
@@ -144,7 +195,7 @@ class WorldEditorController extends PositionComponent
     this.assetImportDelegate,
     this.contextualToolbarBuilder,
     Set<LogicalKeyboardKey> Function()? logicalKeysPressed,
-    Map<ShortcutActivator, ControllerAction>? customKeyBindings,
+    Map<EditorShortcutActivator, EditorControllerAction>? customKeyBindings,
   }) : logicalKeysPressed =
            logicalKeysPressed ??
            (() => HardwareKeyboard.instance.logicalKeysPressed),
@@ -393,6 +444,45 @@ class WorldEditorController extends PositionComponent
     if (onSaveRequest != null) {
       await onSaveRequest!();
     }
+  }
+
+  void duplicateSelection() {
+    final selected = selectionManager.selectedComponents.toList();
+    if (selected.isEmpty) return;
+    for (final component in selected) {
+      if (component is ProtoSerializable) {
+        final any = Any.pack((component as ProtoSerializable).serialize());
+        final pos = component is PositionComponent
+            ? component.absolutePosition + Vector2(32, 32)
+            : _mousePosition;
+        delegate.onPaste(pos, any);
+      }
+    }
+  }
+
+  void focusSelection() {
+    final selected = selectionManager.selectedComponents.whereType<PositionComponent>();
+    if (selected.isEmpty) return;
+
+    final center = Vector2.zero();
+    for (final component in selected) {
+      center.add(component.absolutePosition);
+    }
+    center.scale(1.0 / selected.length);
+
+    game.camera.viewfinder.position = center;
+  }
+
+  void zoomIn() {
+    game.camera.viewfinder.zoom = (game.camera.viewfinder.zoom * 1.2).clamp(0.1, 10.0);
+  }
+
+  void zoomOut() {
+    game.camera.viewfinder.zoom = (game.camera.viewfinder.zoom / 1.2).clamp(0.1, 10.0);
+  }
+
+  void resetZoom() {
+    game.camera.viewfinder.zoom = 1.0;
   }
 
   @override
