@@ -138,6 +138,65 @@ void main() {
       expect(deleted, contains(target));
       expect(selectionManager.hasSelection, isFalse);
     });
+
+    test('custom key bindings override or extend default bindings', () async {
+      final game = TestEditorGame();
+      final selectionManager = WorldEditorSelectionManager();
+      var customSaveCalled = false;
+      var customActionCalled = false;
+
+      await game.load();
+      game.mount();
+      game.onGameResize(Vector2(800, 600));
+
+      final controller = WorldEditorController(
+        selectionManager: selectionManager,
+        delegate: TestSceneMapEditorDelegate(),
+        customKeyBindings: {
+          // Override save shortcut
+          (key: LogicalKeyboardKey.keyS, control: true, shift: false, alt: false): (c) {
+            customSaveCalled = true;
+            return true;
+          },
+          // Add custom shortcut (Ctrl + G)
+          (key: LogicalKeyboardKey.keyG, control: true, shift: false, alt: false): (c) {
+            customActionCalled = true;
+            return true;
+          },
+        },
+      );
+
+      await game.world.add(controller);
+      game.update(0);
+
+      // Trigger Ctrl + S
+      final saveEvent = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyS,
+        logicalKey: LogicalKeyboardKey.keyS,
+        timeStamp: Duration.zero,
+      );
+      final saveHandled = controller.onKeyEvent(
+        saveEvent,
+        {LogicalKeyboardKey.keyS, LogicalKeyboardKey.controlLeft},
+      );
+
+      // Trigger Ctrl + G
+      final gEvent = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyG,
+        logicalKey: LogicalKeyboardKey.keyG,
+        timeStamp: Duration.zero,
+      );
+      final gHandled = controller.onKeyEvent(
+        gEvent,
+        {LogicalKeyboardKey.keyG, LogicalKeyboardKey.controlLeft},
+      );
+
+      expect(saveHandled, isTrue);
+      expect(customSaveCalled, isTrue);
+
+      expect(gHandled, isTrue);
+      expect(customActionCalled, isTrue);
+    });
   });
 }
 

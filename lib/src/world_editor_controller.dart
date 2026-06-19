@@ -18,6 +18,15 @@ import 'tools/move_tool.dart';
 import 'tools/rotate_tool.dart';
 import 'tools/scale_tool.dart';
 
+typedef ShortcutActivator = ({
+  LogicalKeyboardKey key,
+  bool control,
+  bool shift,
+  bool alt,
+});
+
+typedef ControllerAction = bool Function(WorldEditorController controller);
+
 class WorldEditorController extends PositionComponent
     with
         TapCallbacks,
@@ -84,6 +93,50 @@ class WorldEditorController extends PositionComponent
     }
   }
 
+  static final Map<ShortcutActivator, ControllerAction> defaultKeyBindings = {
+    (key: LogicalKeyboardKey.keyS, control: true, shift: false, alt: false): (c) {
+      c.save();
+      return true;
+    },
+    (key: LogicalKeyboardKey.keyC, control: true, shift: false, alt: false): (c) {
+      c.copySelection();
+      return true;
+    },
+    (key: LogicalKeyboardKey.keyV, control: true, shift: false, alt: false): (c) {
+      c.paste();
+      return true;
+    },
+    (key: LogicalKeyboardKey.keyZ, control: true, shift: false, alt: false): (c) {
+      c.commandManager.undo();
+      return true;
+    },
+    (key: LogicalKeyboardKey.keyZ, control: true, shift: true, alt: false): (c) {
+      c.commandManager.redo();
+      return true;
+    },
+    (key: LogicalKeyboardKey.keyY, control: true, shift: false, alt: false): (c) {
+      c.commandManager.redo();
+      return true;
+    },
+    (key: LogicalKeyboardKey.tab, control: false, shift: false, alt: false): (c) {
+      c.selectionManager.togglePrimaryForward();
+      return c.selectionManager.hasSelection;
+    },
+    (key: LogicalKeyboardKey.delete, control: false, shift: false, alt: false): (c) {
+      final selected = c.selectionManager.selectedComponents.toList();
+      if (selected.isNotEmpty) {
+        for (final component in selected) {
+          c.delegate.onDeleteComponent(component);
+        }
+        c.selectionManager.clear();
+        return true;
+      }
+      return false;
+    },
+  };
+
+  final Map<ShortcutActivator, ControllerAction> _keyBindings;
+
   WorldEditorController({
     required this.selectionManager,
     required this.delegate,
@@ -91,9 +144,14 @@ class WorldEditorController extends PositionComponent
     this.assetImportDelegate,
     this.contextualToolbarBuilder,
     Set<LogicalKeyboardKey> Function()? logicalKeysPressed,
+    Map<ShortcutActivator, ControllerAction>? customKeyBindings,
   }) : logicalKeysPressed =
            logicalKeysPressed ??
-           (() => HardwareKeyboard.instance.logicalKeysPressed) {
+           (() => HardwareKeyboard.instance.logicalKeysPressed),
+       _keyBindings = {
+         ...defaultKeyBindings,
+         ...?customKeyBindings,
+       } {
     // The controller should be at a high priority to capture taps,
     // but the gizmos should be even higher.
     priority = 100;
@@ -340,54 +398,25 @@ class WorldEditorController extends PositionComponent
   @override
   bool onKeyEvent(KeyEvent event, Set<LogicalKeyboardKey> keysPressed) {
     if (event is KeyDownEvent) {
-      final isControl =
-          keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+      final ctrl = keysPressed.contains(LogicalKeyboardKey.controlLeft) ||
           keysPressed.contains(LogicalKeyboardKey.controlRight) ||
           keysPressed.contains(LogicalKeyboardKey.metaLeft) ||
           keysPressed.contains(LogicalKeyboardKey.metaRight);
+      final shift = keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+          keysPressed.contains(LogicalKeyboardKey.shiftRight);
+      final alt = keysPressed.contains(LogicalKeyboardKey.altLeft) ||
+          keysPressed.contains(LogicalKeyboardKey.altRight);
 
-      if (isControl) {
-        if (keysPressed.contains(LogicalKeyboardKey.keyS)) {
-          save();
-          return true;
-        }
-        if (keysPressed.contains(LogicalKeyboardKey.keyC)) {
-          copySelection();
-          return true;
-        }
-        if (keysPressed.contains(LogicalKeyboardKey.keyV)) {
-          paste();
-          return true;
-        }
-        if (keysPressed.contains(LogicalKeyboardKey.keyZ)) {
-          if (keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
-              keysPressed.contains(LogicalKeyboardKey.shiftRight)) {
-            commandManager.redo();
-          } else {
-            commandManager.undo();
-          }
-          return true;
-        }
-        if (keysPressed.contains(LogicalKeyboardKey.keyY)) {
-          commandManager.redo();
-          return true;
-        }
-      }
+      final pressedShortcut = (
+        key: event.logicalKey,
+        control: ctrl,
+        shift: shift,
+        alt: alt,
+      );
 
-      if (event.logicalKey == LogicalKeyboardKey.tab) {
-        selectionManager.togglePrimaryForward();
-        return selectionManager.hasSelection;
-      }
-
-      if (event.logicalKey == LogicalKeyboardKey.delete) {
-        final selected = selectionManager.selectedComponents.toList();
-        if (selected.isNotEmpty) {
-          for (final component in selected) {
-            delegate.onDeleteComponent(component);
-          }
-          selectionManager.clear();
-          return true;
-        }
+      final action = _keyBindings[pressedShortcut];
+      if (action != null) {
+        return action(this);
       }
     }
     return super.onKeyEvent(event, keysPressed);
