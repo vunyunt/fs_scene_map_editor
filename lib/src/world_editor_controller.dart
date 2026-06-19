@@ -378,6 +378,17 @@ class WorldEditorController extends PositionComponent
         selectionManager.togglePrimaryForward();
         return selectionManager.hasSelection;
       }
+
+      if (event.logicalKey == LogicalKeyboardKey.delete) {
+        final selected = selectionManager.selectedComponents.toList();
+        if (selected.isNotEmpty) {
+          for (final component in selected) {
+            delegate.onDeleteComponent(component);
+          }
+          selectionManager.clear();
+          return true;
+        }
+      }
     }
     return super.onKeyEvent(event, keysPressed);
   }

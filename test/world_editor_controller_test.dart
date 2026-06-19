@@ -106,5 +106,50 @@ void main() {
 
       expect(selectionManager.selectedComponents, contains(selected));
     });
+
+    test('delete key deletes selected components', () async {
+      final game = TestEditorGame();
+      final target = Component();
+      final selectionManager = WorldEditorSelectionManager()..select(target);
+      final deleted = <Component>[];
+      final delegate = TestSceneMapEditorDelegateWithDelete(deleted);
+
+      await game.load();
+      game.mount();
+      game.onGameResize(Vector2(800, 600));
+
+      final controller = WorldEditorController(
+        selectionManager: selectionManager,
+        delegate: delegate,
+      );
+
+      await game.world.add(controller);
+      game.update(0);
+
+      final event = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.delete,
+        logicalKey: LogicalKeyboardKey.delete,
+        timeStamp: Duration.zero,
+      );
+
+      final handled = controller.onKeyEvent(event, {LogicalKeyboardKey.delete});
+
+      expect(handled, isTrue);
+      expect(deleted, contains(target));
+      expect(selectionManager.hasSelection, isFalse);
+    });
   });
+}
+
+class TestSceneMapEditorDelegateWithDelete implements SceneMapEditorDelegate {
+  final List<Component> deleted;
+  TestSceneMapEditorDelegateWithDelete(this.deleted);
+
+  @override
+  void onDeleteComponent(Component component) {
+    deleted.add(component);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
