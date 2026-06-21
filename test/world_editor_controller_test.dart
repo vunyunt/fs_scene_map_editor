@@ -387,6 +387,149 @@ void main() {
       expect(handled, isTrue);
       expect(controller.activeToolType.value, ScaleTool);
     });
+
+    test('Ctrl + G groups selected components', () async {
+      final game = TestEditorGame();
+      final a = PositionComponent()..position = Vector2(10, 20);
+      final b = PositionComponent()..position = Vector2(50, 60);
+      final selectionManager = WorldEditorSelectionManager()
+        ..select(a)
+        ..select(b);
+      final delegate = TestSceneMapEditorDelegateWithGroup();
+
+      await game.load();
+      game.mount();
+      game.onGameResize(Vector2(800, 600));
+
+      final controller = WorldEditorController(
+        selectionManager: selectionManager,
+        delegate: delegate,
+      );
+
+      await game.world.add(controller);
+      game.update(0);
+
+      final event = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyG,
+        logicalKey: LogicalKeyboardKey.keyG,
+        timeStamp: Duration.zero,
+      );
+
+      final handled = controller.onKeyEvent(
+        event,
+        {LogicalKeyboardKey.keyG, LogicalKeyboardKey.controlLeft},
+      );
+
+      expect(handled, isTrue);
+      expect(delegate.groupedComponents, hasLength(1));
+      expect(delegate.groupedComponents.first, containsAll([a, b]));
+    });
+
+    test('Ctrl + G does not group when fewer than 2 components selected', () async {
+      final game = TestEditorGame();
+      final a = PositionComponent()..position = Vector2(10, 20);
+      final selectionManager = WorldEditorSelectionManager()..select(a);
+      final delegate = TestSceneMapEditorDelegateWithGroup();
+
+      await game.load();
+      game.mount();
+      game.onGameResize(Vector2(800, 600));
+
+      final controller = WorldEditorController(
+        selectionManager: selectionManager,
+        delegate: delegate,
+      );
+
+      await game.world.add(controller);
+      game.update(0);
+
+      final event = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyG,
+        logicalKey: LogicalKeyboardKey.keyG,
+        timeStamp: Duration.zero,
+      );
+
+      final handled = controller.onKeyEvent(
+        event,
+        {LogicalKeyboardKey.keyG, LogicalKeyboardKey.controlLeft},
+      );
+
+      expect(handled, isFalse);
+      expect(delegate.groupedComponents, isEmpty);
+    });
+
+    test('Ctrl + Shift + G ungroups selected component', () async {
+      final game = TestEditorGame();
+      final group = PositionComponent()..position = Vector2(10, 20);
+      final selectionManager = WorldEditorSelectionManager()..select(group);
+      final delegate = TestSceneMapEditorDelegateWithGroup();
+
+      await game.load();
+      game.mount();
+      game.onGameResize(Vector2(800, 600));
+
+      final controller = WorldEditorController(
+        selectionManager: selectionManager,
+        delegate: delegate,
+      );
+
+      await game.world.add(controller);
+      game.update(0);
+
+      final event = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyG,
+        logicalKey: LogicalKeyboardKey.keyG,
+        timeStamp: Duration.zero,
+      );
+
+      final handled = controller.onKeyEvent(
+        event,
+        {
+          LogicalKeyboardKey.keyG,
+          LogicalKeyboardKey.controlLeft,
+          LogicalKeyboardKey.shiftLeft,
+        },
+      );
+
+      expect(handled, isTrue);
+      expect(delegate.ungroupedComponents, contains(group));
+    });
+
+    test('Ctrl + Shift + G does not ungroup with no selection', () async {
+      final game = TestEditorGame();
+      final selectionManager = WorldEditorSelectionManager();
+      final delegate = TestSceneMapEditorDelegateWithGroup();
+
+      await game.load();
+      game.mount();
+      game.onGameResize(Vector2(800, 600));
+
+      final controller = WorldEditorController(
+        selectionManager: selectionManager,
+        delegate: delegate,
+      );
+
+      await game.world.add(controller);
+      game.update(0);
+
+      final event = KeyDownEvent(
+        physicalKey: PhysicalKeyboardKey.keyG,
+        logicalKey: LogicalKeyboardKey.keyG,
+        timeStamp: Duration.zero,
+      );
+
+      final handled = controller.onKeyEvent(
+        event,
+        {
+          LogicalKeyboardKey.keyG,
+          LogicalKeyboardKey.controlLeft,
+          LogicalKeyboardKey.shiftLeft,
+        },
+      );
+
+      expect(handled, isFalse);
+      expect(delegate.ungroupedComponents, isEmpty);
+    });
   });
 }
 
@@ -397,6 +540,24 @@ class TestSceneMapEditorDelegateWithDelete implements SceneMapEditorDelegate {
   @override
   void onDeleteComponent(Component component) {
     deleted.add(component);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class TestSceneMapEditorDelegateWithGroup implements SceneMapEditorDelegate {
+  List<List<PositionComponent>> groupedComponents = [];
+  List<PositionComponent> ungroupedComponents = [];
+
+  @override
+  void onGroup(List<PositionComponent> components) {
+    groupedComponents.add(List.from(components));
+  }
+
+  @override
+  void onUngroup(PositionComponent group) {
+    ungroupedComponents.add(group);
   }
 
   @override

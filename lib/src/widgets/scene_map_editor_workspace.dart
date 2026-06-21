@@ -10,6 +10,8 @@ import '../world_editor_controller.dart';
 import '../world_editor_selection_manager.dart';
 import 'scene_map_inspector.dart';
 import 'world_editor_contextual_toolbar.dart';
+import 'command_palette.dart';
+import '../command_metadata.dart';
 
 class SceneMapEditorWorkspace extends StatefulWidget {
   final String sceneName;
@@ -21,18 +23,20 @@ class SceneMapEditorWorkspace extends StatefulWidget {
   final Future<void> Function() onSave;
   final VoidCallback onDispose;
   final Map<EditorShortcutActivator, EditorControllerAction>? customKeyBindings;
+  final List<EditorCommandMetadata>? customCommands;
 
   const SceneMapEditorWorkspace({
-    super.key,
     required this.sceneName,
     required this.delegate,
     required this.onLoadScene,
     required this.onSave,
     required this.onDispose,
+    super.key,
     this.childSelectorBuilder,
     this.assetImportDelegate,
     this.contextualToolbarBuilder,
     this.customKeyBindings,
+    this.customCommands,
   });
 
   @override
@@ -57,9 +61,41 @@ class _SceneMapEditorWorkspaceState extends State<SceneMapEditorWorkspace> {
       assetImportDelegate: widget.assetImportDelegate,
       contextualToolbarBuilder: widget.contextualToolbarBuilder,
       customKeyBindings: widget.customKeyBindings,
+      customCommands: widget.customCommands,
     );
+    _editorController.commandPaletteRequest.addListener(_onCommandPaletteRequest);
 
     _loadScene();
+  }
+
+  void _onCommandPaletteRequest() {
+    if (mounted && _editorController.commandPaletteRequest.value) {
+      _editorController.commandPaletteRequest.value = false;
+      showGeneralDialog(
+        context: context,
+        barrierDismissible: true,
+        barrierLabel: 'Command Palette',
+        barrierColor: Colors.black.withValues(alpha: 0.5),
+        transitionDuration: const Duration(milliseconds: 150),
+        pageBuilder: (context, anim1, anim2) {
+          return CommandPalette(controller: _editorController);
+        },
+        transitionBuilder: (context, anim1, anim2, child) {
+          return SlideTransition(
+            position: anim1.drive(
+              Tween<Offset>(
+                begin: const Offset(0.0, -0.1),
+                end: Offset.zero,
+              ).chain(CurveTween(curve: Curves.easeOutCubic)),
+            ),
+            child: FadeTransition(
+              opacity: anim1,
+              child: child,
+            ),
+          );
+        },
+      );
+    }
   }
 
   Future<void> _loadScene() async {
@@ -75,6 +111,7 @@ class _SceneMapEditorWorkspaceState extends State<SceneMapEditorWorkspace> {
 
   @override
   void dispose() {
+    _editorController.commandPaletteRequest.removeListener(_onCommandPaletteRequest);
     widget.onDispose();
     _selectionManager.dispose();
     super.dispose();

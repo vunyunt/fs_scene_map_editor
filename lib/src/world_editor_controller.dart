@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:protobuf_serializable_components/protobuf_serializable_components.dart';
 import 'package:protobuf/well_known_types/google/protobuf/any.pb.dart';
 import 'package:fs_scene_map/fs_scene_map.dart';
+import 'command_metadata.dart';
 
 import 'world_editor_selection_manager.dart';
 import 'world_editor_command_manager.dart';
@@ -46,6 +47,8 @@ class WorldEditorController extends PositionComponent
   final ValueNotifier<SecondaryTapDownEvent?> contextMenuRequest =
       ValueNotifier(null);
   final ValueNotifier<Type> activeToolType = ValueNotifier(MoveTool);
+  final ValueNotifier<bool> commandPaletteRequest = ValueNotifier(false);
+  final List<EditorCommandMetadata> customCommands;
   Future<void> Function()? onSaveRequest;
 
   Vector2? lastSecondaryTapPosition;
@@ -93,100 +96,7 @@ class WorldEditorController extends PositionComponent
     }
   }
 
-  static final Map<EditorShortcutActivator, EditorControllerAction> defaultKeyBindings = {
-    (key: LogicalKeyboardKey.keyS, control: true, shift: false, alt: false): (c) {
-      c.save();
-      return true;
-    },
-    (key: LogicalKeyboardKey.keyC, control: true, shift: false, alt: false): (c) {
-      c.copySelection();
-      return true;
-    },
-    (key: LogicalKeyboardKey.keyV, control: true, shift: false, alt: false): (c) {
-      c.paste();
-      return true;
-    },
-    (key: LogicalKeyboardKey.keyZ, control: true, shift: false, alt: false): (c) {
-      c.commandManager.undo();
-      return true;
-    },
-    (key: LogicalKeyboardKey.keyZ, control: true, shift: true, alt: false): (c) {
-      c.commandManager.redo();
-      return true;
-    },
-    (key: LogicalKeyboardKey.keyY, control: true, shift: false, alt: false): (c) {
-      c.commandManager.redo();
-      return true;
-    },
-    (key: LogicalKeyboardKey.tab, control: false, shift: false, alt: false): (c) {
-      c.selectionManager.togglePrimaryForward();
-      return c.selectionManager.hasSelection;
-    },
-    (key: LogicalKeyboardKey.delete, control: false, shift: false, alt: false): (c) {
-      final selected = c.selectionManager.selectedComponents.toList();
-      if (selected.isNotEmpty) {
-        for (final component in selected) {
-          c.delegate.onDeleteComponent(component);
-        }
-        c.selectionManager.clear();
-        return true;
-      }
-      return false;
-    },
-    (key: LogicalKeyboardKey.escape, control: false, shift: false, alt: false): (c) {
-      if (c.selectionManager.hasSelection) {
-        c.selectionManager.clear();
-        return true;
-      }
-      return false;
-    },
-    (key: LogicalKeyboardKey.keyF, control: false, shift: false, alt: false): (c) {
-      c.focusSelection();
-      return true;
-    },
-    (key: LogicalKeyboardKey.keyD, control: true, shift: false, alt: false): (c) {
-      c.duplicateSelection();
-      return true;
-    },
-    (key: LogicalKeyboardKey.equal, control: true, shift: false, alt: false): (c) {
-      c.zoomIn();
-      return true;
-    },
-    (key: LogicalKeyboardKey.numpadAdd, control: true, shift: false, alt: false): (c) {
-      c.zoomIn();
-      return true;
-    },
-    (key: LogicalKeyboardKey.minus, control: true, shift: false, alt: false): (c) {
-      c.zoomOut();
-      return true;
-    },
-    (key: LogicalKeyboardKey.numpadSubtract, control: true, shift: false, alt: false): (c) {
-      c.zoomOut();
-      return true;
-    },
-    (key: LogicalKeyboardKey.digit0, control: true, shift: false, alt: false): (c) {
-      c.resetZoom();
-      return true;
-    },
-    (key: LogicalKeyboardKey.numpad0, control: true, shift: false, alt: false): (c) {
-      c.resetZoom();
-      return true;
-    },
-    (key: LogicalKeyboardKey.digit1, control: false, shift: false, alt: false): (c) {
-      c.useMoveTool();
-      return true;
-    },
-    (key: LogicalKeyboardKey.digit2, control: false, shift: false, alt: false): (c) {
-      c.useRotateTool();
-      return true;
-    },
-    (key: LogicalKeyboardKey.digit3, control: false, shift: false, alt: false): (c) {
-      c.useScaleTool();
-      return true;
-    },
-  };
-
-  final Map<EditorShortcutActivator, EditorControllerAction> _keyBindings;
+  late final Map<EditorShortcutActivator, EditorControllerAction> _keyBindings;
 
   WorldEditorController({
     required this.selectionManager,
@@ -196,17 +106,290 @@ class WorldEditorController extends PositionComponent
     this.contextualToolbarBuilder,
     Set<LogicalKeyboardKey> Function()? logicalKeysPressed,
     Map<EditorShortcutActivator, EditorControllerAction>? customKeyBindings,
+    List<EditorCommandMetadata>? customCommands,
   }) : logicalKeysPressed =
-           logicalKeysPressed ??
-           (() => HardwareKeyboard.instance.logicalKeysPressed),
-       _keyBindings = {
-         ...defaultKeyBindings,
-         ...?customKeyBindings,
-       } {
+            logicalKeysPressed ??
+            (() => HardwareKeyboard.instance.logicalKeysPressed),
+        customCommands = customCommands ?? const [] {
     // The controller should be at a high priority to capture taps,
     // but the gizmos should be even higher.
     priority = 100;
+
+    // Derive the key bindings from the single source of truth: the command
+    // metadata. Each command may expose one or more shortcut activators that
+    // all dispatch to the same action. Caller-supplied customKeyBindings are
+    // applied last so they can override or extend the built-in bindings.
+    _keyBindings = {
+      for (final command in allCommands)
+        for (final shortcut in command.shortcuts)
+          shortcut: command.action,
+      ...?customKeyBindings,
+    };
   }
+
+  List<EditorCommandMetadata> get builtInCommands => [
+        EditorCommandMetadata(
+          id: 'save',
+          label: 'Save Scene',
+          description: 'Save all current scene modifications',
+          shortcutText: 'Ctrl+S',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyS, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.save();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'copy',
+          label: 'Copy Selection',
+          description: 'Copy selected components to clipboard',
+          shortcutText: 'Ctrl+C',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyC, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.copySelection();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'paste',
+          label: 'Paste',
+          description: 'Paste components from clipboard at mouse position',
+          shortcutText: 'Ctrl+V',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyV, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.paste();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'undo',
+          label: 'Undo Action',
+          description: 'Undo the last action',
+          shortcutText: 'Ctrl+Z',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyZ, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.commandManager.undo();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'redo',
+          label: 'Redo Action',
+          description: 'Redo the last undone action',
+          shortcutText: 'Ctrl+Shift+Z',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyZ, control: true, shift: true, alt: false),
+            (key: LogicalKeyboardKey.keyY, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.commandManager.redo();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'delete',
+          label: 'Delete Selection',
+          description: 'Delete all selected components',
+          shortcutText: 'Delete',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.delete, control: false, shift: false, alt: false),
+          ],
+          action: (c) {
+            final selected = c.selectionManager.selectedComponents.toList();
+            if (selected.isNotEmpty) {
+              for (final component in selected) {
+                c.delegate.onDeleteComponent(component);
+              }
+              c.selectionManager.clear();
+              return true;
+            }
+            return false;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'clear_selection',
+          label: 'Clear Selection',
+          description: 'Deselect all components',
+          shortcutText: 'Escape',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.escape, control: false, shift: false, alt: false),
+          ],
+          action: (c) {
+            if (c.selectionManager.hasSelection) {
+              c.selectionManager.clear();
+              return true;
+            }
+            return false;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'focus_selection',
+          label: 'Focus Selection',
+          description: 'Center viewfinder on selected components',
+          shortcutText: 'F',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyF, control: false, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.focusSelection();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'duplicate',
+          label: 'Duplicate Selection',
+          description: 'Duplicate selected components',
+          shortcutText: 'Ctrl+D',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyD, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.duplicateSelection();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'group',
+          label: 'Group Selection',
+          description: 'Group selected components into a parent component',
+          shortcutText: 'Ctrl+G',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyG, control: true, shift: false, alt: false),
+          ],
+          action: (c) => c.groupSelection(),
+        ),
+        EditorCommandMetadata(
+          id: 'ungroup',
+          label: 'Ungroup Selection',
+          description: 'Ungroup children from the selected group component',
+          shortcutText: 'Ctrl+Shift+G',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyG, control: true, shift: true, alt: false),
+          ],
+          action: (c) => c.ungroupSelection(),
+        ),
+        EditorCommandMetadata(
+          id: 'zoom_in',
+          label: 'Zoom In',
+          description: 'Zoom viewfinder in',
+          shortcutText: 'Ctrl++',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.equal, control: true, shift: false, alt: false),
+            (key: LogicalKeyboardKey.numpadAdd, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.zoomIn();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'zoom_out',
+          label: 'Zoom Out',
+          description: 'Zoom viewfinder out',
+          shortcutText: 'Ctrl+-',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.minus, control: true, shift: false, alt: false),
+            (key: LogicalKeyboardKey.numpadSubtract, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.zoomOut();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'zoom_reset',
+          label: 'Reset Zoom',
+          description: 'Reset zoom level to default (1.0)',
+          shortcutText: 'Ctrl+0',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.digit0, control: true, shift: false, alt: false),
+            (key: LogicalKeyboardKey.numpad0, control: true, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.resetZoom();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'tool_move',
+          label: 'Move Tool',
+          description: 'Switch to the move tool',
+          shortcutText: '1',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.digit1, control: false, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.useMoveTool();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'tool_rotate',
+          label: 'Rotate Tool',
+          description: 'Switch to the rotate tool',
+          shortcutText: '2',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.digit2, control: false, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.useRotateTool();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'tool_scale',
+          label: 'Scale Tool',
+          description: 'Switch to the scale tool',
+          shortcutText: '3',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.digit3, control: false, shift: false, alt: false),
+          ],
+          action: (c) {
+            c.useScaleTool();
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'command_palette',
+          label: 'Show Command Palette',
+          description: 'Open the command palette',
+          shortcutText: 'Ctrl+Shift+P',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyP, control: true, shift: true, alt: false),
+          ],
+          action: (c) {
+            c.commandPaletteRequest.value = true;
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'cycle_selection',
+          label: 'Cycle Primary Selection',
+          description: 'Toggle primary selection forward through selected components',
+          shortcutText: 'Tab',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.tab, control: false, shift: false, alt: false),
+          ],
+          showInPalette: false,
+          action: (c) {
+            c.selectionManager.togglePrimaryForward();
+            return c.selectionManager.hasSelection;
+          },
+        ),
+      ];
+
+  List<EditorCommandMetadata> get allCommands => [
+        ...builtInCommands,
+        ...customCommands,
+      ];
 
   @override
   Future<void> onLoad() async {
@@ -458,6 +641,28 @@ class WorldEditorController extends PositionComponent
         delegate.onPaste(pos, any);
       }
     }
+  }
+
+  /// Groups the currently selected positioned components into a new container.
+  /// Requires at least two selected [PositionComponent]s.
+  bool groupSelection() {
+    final selected = selectionManager.selectedComponents
+        .whereType<PositionComponent>()
+        .toList();
+    if (selected.length < 2) return false;
+    delegate.onGroup(selected);
+    return true;
+  }
+
+  /// Ungroups each selected positioned component that has children, reparenting
+  /// its children to the component's current parent.
+  bool ungroupSelection() {
+    final selected = selectionManager.selectedComponents
+        .whereType<PositionComponent>()
+        .toList();
+    if (selected.isEmpty) return false;
+    delegate.onUngroup(selected.first);
+    return true;
   }
 
   void focusSelection() {

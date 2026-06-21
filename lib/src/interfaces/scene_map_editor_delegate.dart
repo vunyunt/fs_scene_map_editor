@@ -10,4 +10,12 @@ abstract class SceneMapEditorDelegate {
   void onAddChild(PositionComponent parent, Any childAny);
   void onCreateComponent(Vector2 worldPos, Any childAny);
   void onPaste(Vector2 worldPos, Any childAny) {}
+
+  /// Groups [components] into a new positioned component container.
+  /// The host app creates the group proto, reparents children, and handles
+  /// chunk-level data migration.
+  void onGroup(List<PositionComponent> components) {}
+
+  /// Ungroups [group], reparenting its children to the group's current parent.
+  void onUngroup(PositionComponent group) {}
 }

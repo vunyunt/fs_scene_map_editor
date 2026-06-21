@@ -1,17 +1,21 @@
 library fs_scene_map_editor;
 
 export 'src/world_editor_controller.dart';
+export 'src/command_metadata.dart';
 export 'src/world_editor_selection_manager.dart';
 export 'src/editor_interfaces.dart';
 export 'src/world_editor_command_manager.dart';
 export 'src/selection_gizmo.dart';
 export 'src/world_grid_component.dart';
 export 'src/snapping_utils.dart';
+export 'src/grouping_utils.dart';
+export 'src/id_utils.dart';
 export 'src/tools/editor_tool.dart';
 export 'src/tools/move_tool.dart';
 export 'src/tools/rotate_tool.dart';
 export 'src/tools/scale_tool.dart';
 export 'src/commands/editor_command.dart';
 export 'src/widgets/scene_map_editor_workspace.dart';
+export 'src/widgets/command_palette.dart';
 export 'src/widgets/scene_map_inspector.dart';
 export 'src/widgets/world_editor_contextual_toolbar.dart';
