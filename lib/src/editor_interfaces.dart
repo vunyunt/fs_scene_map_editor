@@ -12,6 +12,7 @@ import 'world_editor_controller.dart';
 export './interfaces/asset_import_delegate.dart';
 export './interfaces/editor_game_host.dart';
 export './interfaces/scene_map_editor_delegate.dart';
+export './palette_component_metadata.dart';
 
 typedef ChildSelectorBuilder =
     Widget Function(

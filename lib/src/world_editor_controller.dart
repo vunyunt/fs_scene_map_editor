@@ -48,6 +48,7 @@ class WorldEditorController extends PositionComponent
       ValueNotifier(null);
   final ValueNotifier<Type> activeToolType = ValueNotifier(MoveTool);
   final ValueNotifier<bool> commandPaletteRequest = ValueNotifier(false);
+  final ValueNotifier<String> commandPalettePrefix = ValueNotifier('>');
   final List<EditorCommandMetadata> customCommands;
   Future<void> Function()? onSaveRequest;
 
@@ -366,6 +367,22 @@ class WorldEditorController extends PositionComponent
             (key: LogicalKeyboardKey.keyP, control: true, shift: true, alt: false),
           ],
           action: (c) {
+            c.commandPalettePrefix.value = '>';
+            c.commandPaletteRequest.value = true;
+            return true;
+          },
+        ),
+        EditorCommandMetadata(
+          id: 'add_component_palette',
+          label: 'Add Component...',
+          description: 'Open the command palette in add component mode',
+          shortcutText: 'Ctrl+Shift+I / Shift+A',
+          shortcuts: const [
+            (key: LogicalKeyboardKey.keyI, control: true, shift: true, alt: false),
+            (key: LogicalKeyboardKey.keyA, control: false, shift: true, alt: false),
+          ],
+          action: (c) {
+            c.commandPalettePrefix.value = '+';
             c.commandPaletteRequest.value = true;
             return true;
           },
@@ -390,6 +407,32 @@ class WorldEditorController extends PositionComponent
         ...builtInCommands,
         ...customCommands,
       ];
+
+  List<EditorCommandMetadata> get paletteComponentCommands {
+    final registry = game.serializableComponentRegistry;
+    final commands = <EditorCommandMetadata>[];
+    for (final name in registry.registeredQualifiedNames) {
+      final descriptor = registry.getDescriptor(name);
+      final meta = descriptor?.meta;
+      if (meta is PaletteComponentMeta) {
+        final paletteMeta = meta as PaletteComponentMeta;
+        if (paletteMeta.showInPalette) {
+          commands.add(
+            AddComponentCommandMetadata(
+              id: 'add_component_$name',
+              label: paletteMeta.paletteLabel ?? game.getComponentName(descriptor!.defaultInstance),
+              description: paletteMeta.paletteDescription ?? game.getComponentShortDescription(descriptor!.defaultInstance),
+              descriptor: descriptor!,
+              showInPalette: true,
+            ),
+          );
+        }
+      }
+    }
+    // Sort commands alphabetically by label
+    commands.sort((a, b) => a.label.compareTo(b.label));
+    return commands;
+  }
 
   @override
   Future<void> onLoad() async {

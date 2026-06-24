@@ -22,9 +22,10 @@ class _CommandPaletteState extends State<CommandPalette> {
   @override
   void initState() {
     super.initState();
-    // Pre-populate with '>' prefix as requested
-    _textController = TextEditingController(text: '>');
-    // Place the cursor after the '>' so typing appends rather than replacing.
+    // Pre-populate with prefix from controller
+    final prefix = widget.controller.commandPalettePrefix.value;
+    _textController = TextEditingController(text: prefix);
+    // Place the cursor after the prefix so typing appends rather than replacing.
     _textController.selection = const TextSelection.collapsed(offset: 1);
     _textFieldFocusNode = FocusNode();
     _textFieldFocusNode.addListener(_onTextFieldFocusChanged);
@@ -74,14 +75,19 @@ class _CommandPaletteState extends State<CommandPalette> {
 
   void _updateFilteredCommands() {
     final rawQuery = _textController.text;
-    if (!rawQuery.startsWith('>')) {
+    final isCommandMode = rawQuery.startsWith('>');
+    final isAddComponentMode = rawQuery.startsWith('+');
+
+    if (!isCommandMode && !isAddComponentMode) {
       _filteredCommands = [];
       _selectedIndex = 0;
       return;
     }
 
     final query = rawQuery.substring(1).trim().toLowerCase();
-    final all = widget.controller.allCommands.where((cmd) => cmd.showInPalette).toList();
+    final all = isCommandMode
+        ? widget.controller.allCommands.where((cmd) => cmd.showInPalette).toList()
+        : widget.controller.paletteComponentCommands;
 
     if (query.isEmpty) {
       _filteredCommands = all;
@@ -129,6 +135,8 @@ class _CommandPaletteState extends State<CommandPalette> {
   Widget build(BuildContext context) {
     final rawQuery = _textController.text;
     final isCommandMode = rawQuery.startsWith('>');
+    final isAddComponentMode = rawQuery.startsWith('+');
+    final isValidMode = isCommandMode || isAddComponentMode;
 
     return Focus(
       onKeyEvent: (node, event) {
@@ -199,7 +207,9 @@ class _CommandPaletteState extends State<CommandPalette> {
                       fontSize: 15,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'Type to search commands...',
+                      hintText: isAddComponentMode
+                          ? 'Type to search components to add...'
+                          : 'Type to search commands...',
                       hintStyle: const TextStyle(color: Color(0xFF475569)),
                       filled: true,
                       fillColor: const Color(0xFF1E293B), // Slate 800
@@ -227,7 +237,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                 const Divider(color: Color(0x22FFFFFF), height: 1),
                 // Results or instruction helper
                 Flexible(
-                  child: !isCommandMode
+                  child: !isValidMode
                       ? _buildModeHelper()
                       : _filteredCommands.isEmpty
                           ? _buildNoResults()
@@ -242,17 +252,22 @@ class _CommandPaletteState extends State<CommandPalette> {
   }
 
   Widget _buildModeHelper() {
+    final rawQuery = _textController.text;
+    final isAddComponentMode = rawQuery.startsWith('+');
+    final message = isAddComponentMode
+        ? "Type '+' to search components to add"
+        : "Type '>' to search map editor commands";
     return Container(
       padding: const EdgeInsets.all(24.0),
       alignment: Alignment.center,
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.info_outline, color: Color(0xFF94A3B8), size: 18),
-          SizedBox(width: 8),
+          const Icon(Icons.info_outline, color: Color(0xFF94A3B8), size: 18),
+          const SizedBox(width: 8),
           Text(
-            "Type '>' to search map editor commands",
-            style: TextStyle(
+            message,
+            style: const TextStyle(
               color: Color(0xFF94A3B8),
               fontFamily: 'monospace',
               fontSize: 14,
@@ -264,12 +279,16 @@ class _CommandPaletteState extends State<CommandPalette> {
   }
 
   Widget _buildNoResults() {
+    final rawQuery = _textController.text;
+    final isAddComponentMode = rawQuery.startsWith('+');
     return Container(
       padding: const EdgeInsets.all(24.0),
       alignment: Alignment.center,
-      child: const Text(
-        'No matching commands found.',
-        style: TextStyle(
+      child: Text(
+        isAddComponentMode
+            ? 'No matching components found.'
+            : 'No matching commands found.',
+        style: const TextStyle(
           color: Color(0xFF64748B),
           fontFamily: 'monospace',
           fontSize: 14,
@@ -380,10 +399,11 @@ class _KeepCommandPrefixFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    if (newValue.text.startsWith('>')) {
+    if (newValue.text.startsWith('>') || newValue.text.startsWith('+')) {
       return newValue;
     }
-    final text = '>${newValue.text}';
+    final prefix = oldValue.text.startsWith('+') ? '+' : '>';
+    final text = '$prefix${newValue.text}';
     final base = newValue.selection.baseOffset < 0
         ? text.length
         : _clampOffset(newValue.selection.baseOffset + 1, text.length);
